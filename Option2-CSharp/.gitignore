@@ -1,0 +1,45 @@
+## Rider
+.idea/
+*.sln.iml
+
+## Visual Studio
+.vs/
+.vscode/
+*.sln.user
+bin/
+obj/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## NuGet
+*.nupkg
+*.snupkg
+.nuget/
+
+## Build
+publish/
+Release/
+Debug/
+
+## Environment/Config
+appsettings.json
+appsettings.*.json
+*.local.json
+
+## Data
+exported_data/
+guid_mappings.json
+
+## Logs
+logs/
+*.log
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Misc
+.env
+.env.local

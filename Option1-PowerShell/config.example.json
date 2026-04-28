@@ -1,0 +1,59 @@
+{
+  "sourceEnvironment": {
+    "organizationUrl": "https://sourceorg.crm.dynamics.com",
+    "tenantId": "00000000-0000-0000-0000-000000000000",
+    "clientId": "00000000-0000-0000-0000-000000000000",
+    "clientSecret": "your-source-app-registration-secret"
+  },
+  "targetEnvironment": {
+    "organizationUrl": "https://targetorg.crm.dynamics.com",
+    "tenantId": "00000000-0000-0000-0000-000000000000",
+    "clientId": "00000000-0000-0000-0000-000000000000",
+    "clientSecret": "your-target-app-registration-secret"
+  },
+  "batchSettings": {
+    "operationSetMaxSize": 200,
+    "pageSize": 5000,
+    "maxConcurrentProjects": 1
+  },
+  "retrySettings": {
+    "maxRetries": 3,
+    "initialDelaySeconds": 5,
+    "maxDelaySeconds": 60,
+    "exponentialBackoffMultiplier": 2.0
+  },
+  "pollingSettings": {
+    "operationSetPollingIntervalSeconds": 10,
+    "maxPollingWaitMinutes": 30,
+    "statusCheckRetries": 5
+  },
+  "customFieldMappings": [
+    {
+      "sourceFieldName": "msdyn_custom_field_1",
+      "targetFieldName": "msdyn_custom_field_1",
+      "fieldType": "string",
+      "isMapped": true
+    },
+    {
+      "sourceFieldName": "msdyn_custom_field_2",
+      "targetFieldName": "msdyn_custom_field_2",
+      "fieldType": "integer",
+      "isMapped": true
+    }
+  ],
+  "logging": {
+    "logPath": "./logs",
+    "logLevel": "Information",
+    "logToConsole": true,
+    "logToFile": true,
+    "maxLogFileSizeMB": 50,
+    "maxLogFiles": 10
+  },
+  "migration": {
+    "exportOnlyMode": false,
+    "importOnlyMode": false,
+    "resumeFromLastProject": true,
+    "projectFilter": null,
+    "skipProjects": []
+  }
+}

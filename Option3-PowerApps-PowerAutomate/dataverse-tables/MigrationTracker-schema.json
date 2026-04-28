@@ -1,0 +1,479 @@
+{
+  "table": {
+    "name": "cr_projectmigration",
+    "displayName": "Project Migration Tracker",
+    "description": "Tracks the migration status of Dynamics 365 Project Operations projects between environments using the Schedule API",
+    "isManaged": false,
+    "canCreateAttributes": true,
+    "canCreateCharts": true,
+    "canCreateForms": true,
+    "canCreateViews": true,
+    "canBeRelatedDataEntity": true,
+    "canModifyAdditionalSettings": true,
+    "canModifyAuditSettings": true,
+    "canModifyCreateUpdateSettings": true,
+    "canModifyMailMergeSettings": true,
+    "canModifyValidationRules": true,
+    "canOwnRecords": true,
+    "entityColor": "#009999",
+    "entityHoverColor": "#006666",
+    "entitySetName": "cr_projectmigrations",
+    "pluralDisplayName": "Project Migration Trackers",
+    "schemaName": "cr_projectmigration",
+    "metadata": {
+      "description": "Custom table to track project migration progress, errors, and GUID mappings"
+    },
+    "attributes": [
+      {
+        "name": "cr_projectmigrationid",
+        "displayName": "Project Migration",
+        "description": "Unique identifier for this migration tracker record",
+        "attributeType": "Uniqueidentifier",
+        "isPrimaryId": true,
+        "isRequiredForForm": false,
+        "isSearchable": true
+      },
+      {
+        "name": "cr_name",
+        "displayName": "Name",
+        "description": "Auto-generated name combining source project name and timestamp",
+        "attributeType": "String",
+        "maxLength": 100,
+        "format": "Text",
+        "isRequiredForForm": true,
+        "isSearchable": true,
+        "canModifySearchSettings": false,
+        "isSortableEnabled": true
+      },
+      {
+        "name": "cr_sourceprojectid",
+        "displayName": "Source Project ID",
+        "description": "GUID of the project in the source Dynamics 365 environment",
+        "attributeType": "String",
+        "maxLength": 36,
+        "format": "Text",
+        "isRequiredForForm": true,
+        "isSearchable": true,
+        "isSortableEnabled": true,
+        "validationRules": {
+          "pattern": "^[{]?[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[}]?$",
+          "message": "Must be a valid GUID format"
+        }
+      },
+      {
+        "name": "cr_sourceprojectname",
+        "displayName": "Source Project Name",
+        "description": "Human-readable name of the project in the source environment (msdyn_projectname)",
+        "attributeType": "String",
+        "maxLength": 200,
+        "format": "Text",
+        "isRequiredForForm": true,
+        "isSearchable": true,
+        "isSortableEnabled": true
+      },
+      {
+        "name": "cr_targetprojectid",
+        "displayName": "Target Project ID",
+        "description": "GUID of the newly created project in the target Dynamics 365 environment (populated during import)",
+        "attributeType": "String",
+        "maxLength": 36,
+        "format": "Text",
+        "isRequiredForForm": false,
+        "isSearchable": true,
+        "isSortableEnabled": true,
+        "validationRules": {
+          "pattern": "^[{]?[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[}]?$",
+          "message": "Must be a valid GUID format"
+        }
+      },
+      {
+        "name": "cr_status",
+        "displayName": "Migration Status",
+        "description": "Current status of the project migration workflow",
+        "attributeType": "Picklist",
+        "isRequiredForForm": true,
+        "isSearchable": true,
+        "isSortableEnabled": true,
+        "optionSet": [
+          {
+            "value": 100000000,
+            "label": "Pending",
+            "description": "Migration queued, waiting to be processed"
+          },
+          {
+            "value": 100000001,
+            "label": "Exporting",
+            "description": "Power Automate Flow 1 is reading from source environment"
+          },
+          {
+            "value": 100000002,
+            "label": "Exported",
+            "description": "Data has been successfully exported from source, stored in migration tracker"
+          },
+          {
+            "value": 100000003,
+            "label": "Importing",
+            "description": "Power Automate Flow 2 is creating in target environment using Schedule API"
+          },
+          {
+            "value": 100000004,
+            "label": "Completed",
+            "description": "Migration completed successfully - project now exists in target environment"
+          },
+          {
+            "value": 100000005,
+            "label": "Failed",
+            "description": "Migration failed - check cr_errordetails for details"
+          }
+        ],
+        "defaultValue": 100000000
+      },
+      {
+        "name": "cr_errordetails",
+        "displayName": "Error Details",
+        "description": "Detailed error message if migration failed (populated during exception handling)",
+        "attributeType": "Memo",
+        "maxLength": 4000,
+        "isRequiredForForm": false,
+        "isSearchable": true,
+        "rows": 20
+      },
+      {
+        "name": "cr_exportedon",
+        "displayName": "Exported On",
+        "description": "Timestamp when the export phase completed successfully (Flow 1 finish time)",
+        "attributeType": "DateTime",
+        "format": "DateAndTime",
+        "isRequiredForForm": false,
+        "isSortableEnabled": true,
+        "canModifyDateTimeBehavior": false
+      },
+      {
+        "name": "cr_importedon",
+        "displayName": "Imported On",
+        "description": "Timestamp when the import phase completed successfully (Flow 2 finish time)",
+        "attributeType": "DateTime",
+        "format": "DateAndTime",
+        "isRequiredForForm": false,
+        "isSortableEnabled": true,
+        "canModifyDateTimeBehavior": false
+      },
+      {
+        "name": "cr_taskcount",
+        "displayName": "Task Count (Source)",
+        "description": "Total number of tasks found in the source project (populated during export)",
+        "attributeType": "Whole",
+        "format": "None",
+        "isRequiredForForm": false,
+        "isSortableEnabled": true,
+        "minValue": 0,
+        "maxValue": 99999
+      },
+      {
+        "name": "cr_tasksimported",
+        "displayName": "Tasks Imported (Target)",
+        "description": "Number of tasks successfully created in target project (from OperationSet response)",
+        "attributeType": "Whole",
+        "format": "None",
+        "isRequiredForForm": false,
+        "isSortableEnabled": true,
+        "minValue": 0,
+        "maxValue": 99999
+      },
+      {
+        "name": "cr_guidmappingjson",
+        "displayName": "GUID Mapping JSON",
+        "description": "JSON object mapping source GUIDs to target GUIDs for project, tasks, team members (populated during import)",
+        "attributeType": "Memo",
+        "maxLength": 4000,
+        "isRequiredForForm": false,
+        "rows": 30,
+        "note": "Example format: {\"projectMapping\": {\"source-guid-1\": \"target-guid-1\"}, \"taskMapping\": {\"source-task-guid\": \"target-task-guid\"}}"
+      },
+      {
+        "name": "cr_exportedjson",
+        "displayName": "Exported Data (JSON)",
+        "description": "Complete exported project data as JSON (all fields, tasks, team members, dependencies, assignments). Uses file column for large data",
+        "attributeType": "File",
+        "maxSizeInKB": 30720,
+        "isRequiredForForm": false,
+        "acceptedFileTypes": [
+          ".json",
+          ".txt"
+        ],
+        "note": "Stored as JSON file in Dataverse file column. Contains full export from Flow 1"
+      },
+      {
+        "name": "cr_migrationstartedby",
+        "displayName": "Migration Started By",
+        "description": "User who initiated the migration (canvas app user)",
+        "attributeType": "Lookup",
+        "targets": [
+          "systemuser"
+        ],
+        "isRequiredForForm": false,
+        "isSortableEnabled": true
+      },
+      {
+        "name": "cr_migrationstarteddate",
+        "displayName": "Migration Started Date",
+        "description": "Timestamp when user clicked Start Migration in canvas app",
+        "attributeType": "DateTime",
+        "format": "DateAndTime",
+        "isRequiredForForm": false,
+        "isSortableEnabled": true,
+        "canModifyDateTimeBehavior": false
+      },
+      {
+        "name": "cr_operationsetid",
+        "displayName": "OperationSet ID (Phase 1)",
+        "description": "GUID of the first OperationSet created in target (returned from msdyn_CreateOperationSetV1)",
+        "attributeType": "String",
+        "maxLength": 36,
+        "format": "Text",
+        "isRequiredForForm": false,
+        "isSearchable": true,
+        "validationRules": {
+          "pattern": "^[{]?[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[}]?$",
+          "message": "Must be a valid GUID format"
+        }
+      },
+      {
+        "name": "cr_operationset2id",
+        "displayName": "OperationSet ID (Phase 2)",
+        "description": "GUID of the second OperationSet for dependencies and assignments (returned from msdyn_CreateOperationSetV1)",
+        "attributeType": "String",
+        "maxLength": 36,
+        "format": "Text",
+        "isRequiredForForm": false,
+        "isSearchable": true,
+        "validationRules": {
+          "pattern": "^[{]?[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}[}]?$",
+          "message": "Must be a valid GUID format"
+        }
+      },
+      {
+        "name": "cr_retrycount",
+        "displayName": "Retry Count",
+        "description": "Number of times this migration has been retried after failure",
+        "attributeType": "Whole",
+        "format": "None",
+        "isRequiredForForm": false,
+        "isSortableEnabled": true,
+        "minValue": 0,
+        "maxValue": 10
+      },
+      {
+        "name": "cr_notes",
+        "displayName": "Notes",
+        "description": "Additional notes or comments about the migration",
+        "attributeType": "Memo",
+        "maxLength": 2000,
+        "isRequiredForForm": false,
+        "rows": 10
+      }
+    ],
+    "views": [
+      {
+        "name": "Active Migrations",
+        "displayName": "Active Migrations",
+        "description": "Projects currently being migrated (status = Pending, Exporting, Exported, Importing)",
+        "viewType": "System",
+        "isDefault": false,
+        "columns": [
+          "cr_sourceprojectname",
+          "cr_status",
+          "cr_taskcount",
+          "cr_tasksimported",
+          "cr_migrationstarteddate"
+        ],
+        "filter": {
+          "filters": [
+            {
+              "conditions": [
+                {
+                  "attributeName": "cr_status",
+                  "operator": "in",
+                  "values": [
+                    100000000,
+                    100000001,
+                    100000002,
+                    100000003
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Completed Migrations",
+        "displayName": "Completed Migrations",
+        "description": "Successfully migrated projects (status = Completed)",
+        "viewType": "System",
+        "isDefault": false,
+        "columns": [
+          "cr_sourceprojectname",
+          "cr_taskcount",
+          "cr_tasksimported",
+          "cr_importedon"
+        ],
+        "filter": {
+          "filters": [
+            {
+              "conditions": [
+                {
+                  "attributeName": "cr_status",
+                  "operator": "eq",
+                  "value": 100000004
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "Failed Migrations",
+        "displayName": "Failed Migrations",
+        "description": "Projects with migration errors (status = Failed)",
+        "viewType": "System",
+        "isDefault": false,
+        "columns": [
+          "cr_sourceprojectname",
+          "cr_status",
+          "cr_errordetails",
+          "cr_retrycount"
+        ],
+        "filter": {
+          "filters": [
+            {
+              "conditions": [
+                {
+                  "attributeName": "cr_status",
+                  "operator": "eq",
+                  "value": 100000005
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "forms": [
+      {
+        "name": "Main Form",
+        "displayName": "Main Form",
+        "description": "Primary form for viewing and editing migration tracker records",
+        "isDefault": true,
+        "columns": 2,
+        "sections": [
+          {
+            "name": "Source Information",
+            "displayName": "Source Information",
+            "columns": 2,
+            "fields": [
+              "cr_sourceprojectid",
+              "cr_sourceprojectname",
+              "cr_taskcount",
+              "cr_migrationstartedby"
+            ]
+          },
+          {
+            "name": "Target Information",
+            "displayName": "Target Information",
+            "columns": 2,
+            "fields": [
+              "cr_targetprojectid",
+              "cr_tasksimported"
+            ]
+          },
+          {
+            "name": "Migration Status",
+            "displayName": "Migration Status",
+            "columns": 2,
+            "fields": [
+              "cr_status",
+              "cr_migrationstarteddate",
+              "cr_exportedon",
+              "cr_importedon",
+              "cr_retrycount"
+            ]
+          },
+          {
+            "name": "Error Information",
+            "displayName": "Error Information",
+            "columns": 1,
+            "fields": [
+              "cr_errordetails"
+            ]
+          },
+          {
+            "name": "Advanced",
+            "displayName": "Advanced",
+            "columns": 1,
+            "fields": [
+              "cr_guidmappingjson",
+              "cr_operationsetid",
+              "cr_operationset2id",
+              "cr_notes"
+            ]
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "cr_projectmigration_migrations",
+        "displayName": "Project Migration Tracker",
+        "description": "Relationship to track migrations initiated by users",
+        "relatedTable": "systemuser",
+        "relationship": "N:1",
+        "navigationPropertyName": "cr_migrationstartedby"
+      }
+    ],
+    "securityRoles": [
+      {
+        "roleName": "Migration Admin",
+        "description": "Can view, create, and update project migration trackers",
+        "privileges": {
+          "create": true,
+          "read": true,
+          "update": true,
+          "delete": true,
+          "appendTo": true,
+          "append": true,
+          "share": true,
+          "assign": true
+        ]
+      },
+      {
+        "roleName": "Migration User",
+        "description": "Can view and create project migration trackers, but cannot delete",
+        "privileges": {
+          "create": true,
+          "read": true,
+          "update": false,
+          "delete": false,
+          "appendTo": true,
+          "append": false,
+          "share": false,
+          "assign": false
+        }
+      }
+    ],
+    "notes": {
+      "general": "This table is the single source of truth for tracking project migrations. All status updates and error details flow through this table.",
+      "fieldsToUpdate": "cr_status, cr_errordetails, cr_exportedon, cr_importedon, cr_guidmappingjson, cr_operationsetid, cr_tasksimported",
+      "fieldsFromCanvas": "cr_sourceprojectid, cr_sourceprojectname, cr_migrationstartedby, cr_migrationstarteddate",
+      "fieldsFromFlow1": "cr_taskcount, cr_exportedon, cr_exportedjson",
+      "fieldsFromFlow2": "cr_targetprojectid, cr_importedon, cr_tasksimported, cr_guidmappingjson, cr_operationsetid, cr_operationset2id"
+    }
+  },
+  "importNotes": {
+    "createIn": "SOURCE environment only",
+    "purpose": "Tracks migration progress, errors, and mappings while reading from source and writing to target",
+    "replication": "After creating in source, you can optionally replicate a read-only view to target for audit purposes",
+    "databaseSize": "Each migration record ~5KB (tracker) + file attachment (JSON export, variable size)",
+    "estimatedStorage": "For 190 projects: ~1MB tracker + ~50-500MB exported data (depends on project complexity)"
+  }
+}
