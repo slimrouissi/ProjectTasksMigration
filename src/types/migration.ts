@@ -130,6 +130,36 @@ export interface SourceSprint {
 }
 
 // =====================================================
+// Target Calendar Templates (msdyn_workhourtemplate)
+// =====================================================
+
+/**
+ * Health of a work hour template's calendar in the target environment.
+ * msdyn_CreateProjectV1 copies the template calendar into the new project, so a
+ * template whose calendar is missing makes project creation fail (0x80040265).
+ */
+export type WorkHourTemplateStatus =
+  | 'valid'            // Calendar exists and has work hours
+  | 'missing-calendar' // msdyn_calendarid is empty or points to a calendar that doesn't exist
+  | 'no-work-hours'    // Calendar exists but has no calendar rules
+  | 'unknown';         // Calendar could not be read (e.g. missing privilege)
+
+export interface WorkHourTemplateInfo {
+  id: string;
+  name: string;
+  calendarId?: string;
+  templateResourceId?: string;     // Template Resource (bookable resource), optional in newer versions
+  isDefault: boolean;              // Default Work Template in Project Parameters
+  status: WorkHourTemplateStatus;
+  statusDetail?: string;
+}
+
+export interface WorkHourTemplateCheck {
+  templates: WorkHourTemplateInfo[];
+  defaultTemplateId?: string;      // From msdyn_projectparameter.msdyn_defaultworktemplate
+}
+
+// =====================================================
 // Dependency Type Mapping
 // =====================================================
 

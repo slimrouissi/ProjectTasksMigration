@@ -12,6 +12,11 @@ import { IdMappingService } from './IdMappingService';
 import { sortTasksTopologically } from '../utils/taskSorter';
 import { batchEntities, getBatchDescription } from '../utils/operationSetBatcher';
 import {
+  extractDataverseErrorMessage,
+  isWorkHourTemplateCalendarError,
+  WORK_HOUR_TEMPLATE_FIX,
+} from '../utils/dataverseErrors';
+import {
   mapProject,
   mapTeamMember,
   mapTask,
@@ -52,13 +57,20 @@ export class TargetService {
 
     try {
       // Stage 1: Create project
-      onStage('creating-project', `Creating project "${data.project.msdyn_subject}"...`);
+      const calendarNote = config.workHourTemplateId
+        ? ` with calendar template "${config.workHourTemplateName || config.workHourTemplateId}"`
+        : ' with the target default calendar template';
+      onStage('creating-project', `Creating project "${data.project.msdyn_subject}"${calendarNote}...`);
       const targetProjectId = idMap.createMapping('project', data.project.msdyn_projectid, data.project.msdyn_subject);
 
       const projectPayload = mapProject(data.project, targetProjectId, config, dateOffset);
       const projectResult = await this.scheduleApi.createProject(projectPayload);
       if (!projectResult.success) {
-        throw new Error(`Failed to create project: ${projectResult.error}`);
+        let message = `Failed to create project: ${extractDataverseErrorMessage(projectResult.error)}`;
+        if (isWorkHourTemplateCalendarError(projectResult.error)) {
+          message += ` — ${WORK_HOUR_TEMPLATE_FIX}`;
+        }
+        throw new Error(message);
       }
       console.log(`${method}: Project created with ID ${targetProjectId}`);
 

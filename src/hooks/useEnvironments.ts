@@ -8,6 +8,7 @@ import { DataverseClient } from '../clients/DataverseClient';
 import { ScheduleApiClient } from '../clients/ScheduleApiClient';
 import { SourceService } from '../services/SourceService';
 import { TargetService } from '../services/TargetService';
+import { TargetCalendarService } from '../services/TargetCalendarService';
 import { SOURCE_ENV, TARGET_ENV, EnvironmentConfig } from '../config/environments';
 import { EnvironmentStatus, ConnectionStatus } from '../types/ui';
 import { useAuth } from '../auth/useAuth';
@@ -19,6 +20,7 @@ export interface UseEnvironmentsReturn {
   targetClient: DataverseClient | null;
   sourceService: SourceService | null;
   targetService: TargetService | null;
+  targetCalendarService: TargetCalendarService | null;
   scheduleApiClient: ScheduleApiClient | null;
   checkConnections: () => Promise<void>;
   isReady: boolean;
@@ -43,6 +45,7 @@ export function useEnvironments(): UseEnvironmentsReturn {
   const [targetClient, setTargetClient] = useState<DataverseClient | null>(null);
   const [sourceService, setSourceService] = useState<SourceService | null>(null);
   const [targetService, setTargetService] = useState<TargetService | null>(null);
+  const [targetCalendarService, setTargetCalendarService] = useState<TargetCalendarService | null>(null);
   const [scheduleApiClient, setScheduleApiClient] = useState<ScheduleApiClient | null>(null);
 
   const checkConnection = useCallback(
@@ -104,6 +107,7 @@ export function useEnvironments(): UseEnvironmentsReturn {
       const schedApi = new ScheduleApiClient(tgt);
       setScheduleApiClient(schedApi);
       setTargetService(new TargetService(schedApi));
+      setTargetCalendarService(new TargetCalendarService(tgt));
     }
   }, [checkConnection]);
 
@@ -123,6 +127,7 @@ export function useEnvironments(): UseEnvironmentsReturn {
     targetClient,
     sourceService,
     targetService,
+    targetCalendarService,
     scheduleApiClient,
     checkConnections,
     isReady,

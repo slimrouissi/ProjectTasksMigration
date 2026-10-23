@@ -53,6 +53,7 @@ export interface CreateProjectPayload {
     msdyn_description?: string;
     msdyn_scheduledstart?: string; // ISO date
     msdyn_scheduledend?: string;   // ISO date
+    'msdyn_workhourtemplate@odata.bind'?: string; // /msdyn_workhourtemplates(<guid>) — source of the project calendar
   };
 }
 

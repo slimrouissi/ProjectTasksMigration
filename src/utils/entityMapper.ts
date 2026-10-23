@@ -57,6 +57,11 @@ export function mapProject(
     payload.Project.msdyn_scheduledend = applyDateOffset(source.msdyn_scheduledend, dateOffset);
   }
 
+  // Without a template, the target's Default Work Template (Project Parameters) is used for the project calendar
+  if (config.workHourTemplateId) {
+    payload.Project['msdyn_workhourtemplate@odata.bind'] = `/msdyn_workhourtemplates(${config.workHourTemplateId})`;
+  }
+
   return payload;
 }
 

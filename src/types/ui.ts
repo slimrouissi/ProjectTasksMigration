@@ -45,6 +45,8 @@ export interface MigrationConfig {
   dateHandling: DateStrategy;
   teamMembers: TeamMemberStrategy;
   conflictHandling: ConflictStrategy;
+  workHourTemplateId?: string;     // Target calendar template for new projects (unset = target's default)
+  workHourTemplateName?: string;
 }
 
 export const DEFAULT_MIGRATION_CONFIG: MigrationConfig = {

@@ -136,7 +136,7 @@ export function MigrationWizard({ wizard, environments, migration }: MigrationWi
           <PreviewStep wizard={wizard} migration={migration} />
         )}
         {state.currentStep === 'config' && (
-          <ConfigStep wizard={wizard} />
+          <ConfigStep wizard={wizard} environments={environments} />
         )}
         {state.currentStep === 'execute' && (
           <ExecuteStep wizard={wizard} environments={environments} migration={migration} />
