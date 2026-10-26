@@ -1,171 +1,204 @@
 /**
- * TypeScript interfaces for UI state management
- * Covers wizard steps, migration progress, and configuration options
+ * UI and run configuration types
  */
 
-import { SourceProjectData, EntityCounts, IdMappingTable } from './migration';
+import type { IdMappingTable, ProjectKeyRule, ProjectReconciliation, ReadinessCheck } from './migration';
 
-// =====================================================
-// Wizard State
-// =====================================================
+export type WizardStep = 'projects' | 'options' | 'readiness' | 'run';
 
-export type WizardStep = 'select' | 'preview' | 'config' | 'execute';
-
-export const WIZARD_STEPS: WizardStep[] = ['select', 'preview', 'config', 'execute'];
+export const WIZARD_STEPS: WizardStep[] = ['projects', 'options', 'readiness', 'run'];
 
 export const WIZARD_STEP_LABELS: Record<WizardStep, string> = {
-  select: 'Select Projects',
-  preview: 'Preview & Validate',
-  config: 'Configure Options',
-  execute: 'Execute Migration',
+  projects: 'Projects',
+  options: 'Options',
+  readiness: 'Readiness check',
+  run: 'Run & reconcile',
 };
 
-export interface WizardState {
-  currentStep: WizardStep;
-  selectedProjectIds: string[];
-  projectData: Map<string, SourceProjectData>;
-  config: MigrationConfig;
-  isLoading: boolean;
-  error?: string;
-}
+export const WIZARD_STEP_HINTS: Record<WizardStep, string> = {
+  projects: 'What to migrate, and where it goes',
+  options: 'What to copy and how to handle gaps',
+  readiness: 'Matches, resources and data, checked before anything is written',
+  run: 'Migrate, then compare source and target',
+};
 
 // =====================================================
-// Migration Configuration (Step 3)
+// Run configuration
 // =====================================================
 
-export type NamingStrategy = 'keep' | 'prefix' | 'custom';
+/** existing = add tasks/assignments into project shells that already exist in the target; create = create new projects */
+export type ProjectMode = 'existing' | 'create';
 export type DateStrategy = 'keep' | 'shift';
-export type TeamMemberStrategy = 'generic' | 'match' | 'skip';
-export type ConflictStrategy = 'skip' | 'duplicate';
 
 export interface MigrationConfig {
-  naming: NamingStrategy;
-  namePrefix?: string;             // Used when naming = 'prefix'
-  customNames?: Map<string, string>; // Used when naming = 'custom' (projectId → name)
+  mode: ProjectMode;
+  /** existing mode: create a project when no shell is found (otherwise the project is skipped) */
+  createMissing: boolean;
+  keyRule: ProjectKeyRule;
+  /** Manual project pairing chosen in the readiness step (source project ID → target project ID) */
+  manualMatches: Record<string, string>;
+  /** Names for created projects */
+  naming: 'keep' | 'prefix';
+  namePrefix: string;
   dateHandling: DateStrategy;
-  teamMembers: TeamMemberStrategy;
-  conflictHandling: ConflictStrategy;
-  workHourTemplateId?: string;     // Target calendar template for new projects (unset = target's default)
+  /** Calendar template for created projects (unset = target default) */
+  workHourTemplateId?: string;
   workHourTemplateName?: string;
+  /** Team members whose resource can't be used: add a generic team member with the same role, or leave them out */
+  unresolvedResources: 'generic' | 'skip';
+  fallbackRoleId?: string;
+  resourceOverrides: Record<string, string>;
+  roleOverrides: Record<string, string>;
+  copyAllocations: boolean;
+  /** Also reset planned hours on assignments that were already in the target (e.g. after an interrupted run) */
+  reapplyAllocations: boolean;
+  copyCustomTaskFields: boolean;
+  /** Logical names of related tables to copy (risks, issues, status reports, custom tables) */
+  relatedTables: string[];
 }
 
 export const DEFAULT_MIGRATION_CONFIG: MigrationConfig = {
+  mode: 'existing',
+  createMissing: false,
+  keyRule: { sourceField: 'msdyn_projectnumber', targetField: 'msdyn_projectnumber', fallbackToName: true },
+  manualMatches: {},
   naming: 'keep',
   namePrefix: '[Migrated] ',
   dateHandling: 'keep',
-  teamMembers: 'generic',
-  conflictHandling: 'skip',
+  unresolvedResources: 'generic',
+  resourceOverrides: {},
+  roleOverrides: {},
+  copyAllocations: true,
+  reapplyAllocations: false,
+  copyCustomTaskFields: false,
+  relatedTables: [],
 };
 
 // =====================================================
-// Migration Execution State (Step 4)
+// Run progress and results
 // =====================================================
 
 export type MigrationStage =
   | 'idle'
-  | 'creating-project'
-  | 'creating-team'
-  | 'creating-buckets'
-  | 'creating-tasks'
-  | 'creating-dependencies'
-  | 'creating-assignments'
-  | 'creating-sprints'
+  | 'project'
+  | 'team'
+  | 'buckets'
+  | 'tasks'
+  | 'dependencies'
+  | 'assignments'
+  | 'allocations'
+  | 'related'
+  | 'reconcile'
   | 'completed'
   | 'failed';
 
 export const MIGRATION_STAGE_LABELS: Record<MigrationStage, string> = {
-  idle: 'Waiting to start',
-  'creating-project': 'Creating project',
-  'creating-team': 'Creating team members',
-  'creating-buckets': 'Creating buckets',
-  'creating-tasks': 'Creating tasks',
-  'creating-dependencies': 'Creating dependencies',
-  'creating-assignments': 'Creating assignments',
-  'creating-sprints': 'Creating sprints',
-  completed: 'Migration completed',
-  failed: 'Migration failed',
+  idle: 'Waiting',
+  project: 'Project',
+  team: 'Team members',
+  buckets: 'Buckets',
+  tasks: 'Tasks',
+  dependencies: 'Dependencies',
+  assignments: 'Assignments',
+  allocations: 'Allocations',
+  related: 'Related records',
+  reconcile: 'Reconciliation',
+  completed: 'Completed',
+  failed: 'Failed',
 };
 
-export interface MigrationProgress {
-  stage: MigrationStage;
-  currentProject?: string;         // Name of project being migrated
-  currentProjectIndex: number;     // 0-based index
-  totalProjects: number;
-  stageProgress: number;           // 0-100 for current stage
-  overallProgress: number;         // 0-100 across all projects
-  logs: MigrationLogEntry[];
-  errors: MigrationError[];
-}
-
 export interface MigrationLogEntry {
-  timestamp: string;               // ISO date
+  timestamp: string;
+  project?: string;
   stage: MigrationStage;
   message: string;
   level: 'info' | 'warn' | 'error' | 'success';
-  entityType?: string;
-  entityName?: string;
-  operationSetId?: string;
 }
 
-export interface MigrationError {
-  timestamp: string;
+export interface StageCount {
+  created: number;
+  existing: number;
+  skipped: number;
+  failed: number;
+}
+
+export type StageKey = 'teamMembers' | 'buckets' | 'tasks' | 'dependencies' | 'assignments' | 'allocations' | 'related';
+
+export type StageCounts = Record<StageKey, StageCount>;
+
+export const STAGE_COUNT_LABELS: Record<StageKey, string> = {
+  teamMembers: 'Team members',
+  buckets: 'Buckets',
+  tasks: 'Tasks',
+  dependencies: 'Dependencies',
+  assignments: 'Assignments',
+  allocations: 'Allocations',
+  related: 'Related records',
+};
+
+export const emptyStageCounts = (): StageCounts => ({
+  teamMembers: { created: 0, existing: 0, skipped: 0, failed: 0 },
+  buckets: { created: 0, existing: 0, skipped: 0, failed: 0 },
+  tasks: { created: 0, existing: 0, skipped: 0, failed: 0 },
+  dependencies: { created: 0, existing: 0, skipped: 0, failed: 0 },
+  assignments: { created: 0, existing: 0, skipped: 0, failed: 0 },
+  allocations: { created: 0, existing: 0, skipped: 0, failed: 0 },
+  related: { created: 0, existing: 0, skipped: 0, failed: 0 },
+});
+
+export interface ProjectRunResult {
+  sourceProjectId: string;
+  sourceName: string;
+  targetProjectId?: string;
+  targetName?: string;
+  projectCreated: boolean;
+  status: 'succeeded' | 'partial' | 'failed' | 'skipped';
+  counts: StageCounts;
+  errors: string[];
+  warnings: string[];
+  durationMs: number;
+  idMappings?: IdMappingTable;
+  reconciliation?: ProjectReconciliation;
+}
+
+export interface MigrationProgress {
   stage: MigrationStage;
-  projectName: string;
-  entityType?: string;
-  entityName?: string;
-  sourceId?: string;
-  message: string;
-  details?: string;
+  currentProject?: string;
+  currentProjectIndex: number;
+  totalProjects: number;
+  overallProgress: number;
+  logs: MigrationLogEntry[];
+  results: ProjectRunResult[];
 }
-
-// =====================================================
-// Migration Result
-// =====================================================
 
 export interface MigrationResult {
   success: boolean;
-  projectResults: ProjectMigrationResult[];
-  totalDuration: number;           // Milliseconds
-  idMappings: IdMappingTable[];
-}
-
-export interface ProjectMigrationResult {
-  sourceProjectId: string;
-  sourceProjectName: string;
-  targetProjectId?: string;
-  success: boolean;
-  entityCounts: MigratedEntityCounts;
-  errors: MigrationError[];
-  duration: number;                // Milliseconds
-}
-
-export interface MigratedEntityCounts {
-  projects: { attempted: number; succeeded: number };
-  teamMembers: { attempted: number; succeeded: number };
-  buckets: { attempted: number; succeeded: number };
-  tasks: { attempted: number; succeeded: number };
-  dependencies: { attempted: number; succeeded: number };
-  assignments: { attempted: number; succeeded: number };
-  sprints: { attempted: number; succeeded: number };
+  projectResults: ProjectRunResult[];
+  totalDuration: number;
+  startedAt: string;
+  finishedAt: string;
 }
 
 // =====================================================
-// Environment Status
+// Environment status (header)
 // =====================================================
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
 export interface EnvironmentStatus {
-  name: string;
+  role: 'source' | 'target';
   url: string;
   status: ConnectionStatus;
+  friendlyName?: string;
   userId?: string;
   userName?: string;
+  projectOperationsVersion?: string;
+  environmentId?: string;
   error?: string;
 }
 
 // =====================================================
-// Validation
+// Validation (source data)
 // =====================================================
 
 export type ValidationSeverity = 'error' | 'warning' | 'info';
@@ -183,18 +216,4 @@ export interface ValidationResult {
   issues: ValidationIssue[];
 }
 
-// =====================================================
-// Project List Item (Step 1 display)
-// =====================================================
-
-export interface ProjectListItem {
-  id: string;
-  name: string;
-  description?: string;
-  startDate?: string;
-  endDate?: string;
-  progress?: number;
-  entityCounts?: EntityCounts;
-  isSelected: boolean;
-  isLoadingCounts: boolean;
-}
+export type { ReadinessCheck };

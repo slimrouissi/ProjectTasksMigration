@@ -1,9 +1,9 @@
 :root {
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #242424;
-  background-color: #fafafa;
+  background-color: #f3f4f7;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -18,10 +18,15 @@
 
 body {
   min-height: 100vh;
+  background: linear-gradient(180deg, #eef1f8 0, #f3f4f7 240px);
 }
 
 #root {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+}
+
+a {
+  color: #0f6cbd;
 }

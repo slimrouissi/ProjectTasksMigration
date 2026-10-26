@@ -1,13 +1,15 @@
 {
   "name": "project-tasks-migration",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest"
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit",
+    "migrate": "vite-node scripts/migrate-cli.ts --"
   },
   "dependencies": {
     "@azure/msal-browser": "^3.27.0",

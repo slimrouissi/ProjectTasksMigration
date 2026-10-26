@@ -1,199 +1,169 @@
 /**
- * Schedule API client wrapping D365 Project Operations actions
- * Uses DataverseClient for HTTP calls with proper OperationSet patterns
+ * Project schedule API client (msdyn_* custom actions in Project Operations).
+ *
+ * Verified against Project Operations 1.0.0.87 (Oct 2026):
+ * - OperationSet status: 192350000 Open, 192350001 Pending, 192350002 Abandoned, 192350003 Completed, 192350004 Failed
+ * - Tasks created through PssCreate need msdyn_LinkStatus, msdyn_project, msdyn_projectbucket and msdyn_subject
+ * - Resource assignments are created without dates/hours; hours are set with msdyn_PssUpdateResourceAssignmentContourV1
+ * - Only users with a Project license can call these actions (not application users)
  */
 
-import { DataverseClient } from './DataverseClient';
-import { OPERATION_SET_TIMEOUT, POLL_INTERVAL, MAX_POLL_ATTEMPTS } from '../config/appConfig';
-import { ServiceResult } from '../types/migration';
-import {
-  CreateProjectPayload,
-  CreateProjectResponse,
-  CreateTeamMemberPayload,
-  CreateTeamMemberResponse,
-  CreateOperationSetResponse,
-  PssEntity,
-  ExecuteOperationSetResponse,
-  OperationSetDetail,
-  OPERATION_SET_STATUS_MAP,
-} from '../types/operationSet';
+import { DataverseClient, DataverseHttpError } from './DataverseClient';
+import { OPERATION_SET_TIMEOUT, POLL_INTERVAL, OPERATION_SET_MAX_WAIT, MAX_OPERATIONS_PER_SET } from '../config/appConfig';
+import type { ServiceResult } from '../types/migration';
+import type { ContourSlice } from '../utils/plannedWork';
+import { extractDataverseErrorMessage } from '../utils/dataverseErrors';
+
+export const OPERATION_SET_STATUS = {
+  Open: 192350000,
+  Pending: 192350001,
+  Abandoned: 192350002,
+  Completed: 192350003,
+  Failed: 192350004,
+} as const;
+
+const STATUS_LABEL: Record<number, string> = {
+  192350000: 'Open',
+  192350001: 'Pending',
+  192350002: 'Abandoned',
+  192350003: 'Completed',
+  192350004: 'Failed',
+};
+
+/** Value for msdyn_projecttask.msdyn_LinkStatus required by PssCreate */
+export const TASK_LINK_STATUS_NOT_LINKED = 192350000;
+
+export interface PssEntity {
+  '@odata.type': string;
+  [key: string]: unknown;
+}
+
+export type ScheduleOperation =
+  | { kind: 'create'; entity: PssEntity; label?: string }
+  | { kind: 'update'; entity: PssEntity; label?: string }
+  | { kind: 'contour'; assignmentId: string; contour: ContourSlice[]; label?: string };
+
+export interface OperationSetOutcome {
+  operationSetId: string;
+  status: number;
+  statusLabel: string;
+  error?: string;
+}
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class ScheduleApiClient {
-  private client: DataverseClient;
+  readonly client: DataverseClient;
 
   constructor(client: DataverseClient) {
     this.client = client;
   }
 
-  /**
-   * Create a project via msdyn_CreateProjectV1 (unbound action, outside OperationSet)
-   */
-  async createProject(payload: CreateProjectPayload): Promise<ServiceResult<CreateProjectResponse>> {
-    console.log('ScheduleApiClient: createProject', payload.Project.msdyn_subject);
-    console.time('ScheduleApiClient.createProject');
-
-    const result = await this.client.post<CreateProjectPayload, CreateProjectResponse>(
+  async createProject(project: Record<string, unknown>): Promise<ServiceResult<string>> {
+    const result = await this.client.post<{ Project: Record<string, unknown> }, { ProjectId: string }>(
       'msdyn_CreateProjectV1',
-      payload,
+      { Project: { '@odata.type': 'Microsoft.Dynamics.CRM.msdyn_project', ...project } },
       OPERATION_SET_TIMEOUT
     );
-
-    console.timeEnd('ScheduleApiClient.createProject');
-    return result;
+    return result.success ? { success: true, data: result.data?.ProjectId || (project.msdyn_projectid as string) } : { success: false, error: result.error };
   }
 
-  /**
-   * Create a team member via msdyn_CreateTeamMemberV1 (unbound action, outside OperationSet)
-   */
-  async createTeamMember(payload: CreateTeamMemberPayload): Promise<ServiceResult<CreateTeamMemberResponse>> {
-    console.log('ScheduleApiClient: createTeamMember', payload.TeamMember.msdyn_name);
-    console.time('ScheduleApiClient.createTeamMember');
-
-    const result = await this.client.post<CreateTeamMemberPayload, CreateTeamMemberResponse>(
+  async createTeamMember(teamMember: Record<string, unknown>): Promise<ServiceResult<string>> {
+    const result = await this.client.post<{ TeamMember: Record<string, unknown> }, { TeamMemberId: string }>(
       'msdyn_CreateTeamMemberV1',
-      payload,
+      { TeamMember: { '@odata.type': 'Microsoft.Dynamics.CRM.msdyn_projectteam', ...teamMember } },
       OPERATION_SET_TIMEOUT
     );
-
-    console.timeEnd('ScheduleApiClient.createTeamMember');
-    return result;
+    return result.success ? { success: true, data: result.data?.TeamMemberId } : { success: false, error: result.error };
   }
 
-  /**
-   * Create an OperationSet for batching entity operations
-   */
-  async createOperationSet(projectId: string, description: string): Promise<ServiceResult<CreateOperationSetResponse>> {
-    console.log(`ScheduleApiClient: createOperationSet for project ${projectId}`);
-    console.time('ScheduleApiClient.createOperationSet');
-
-    const result = await this.client.post<{ ProjectId: string; Description: string }, CreateOperationSetResponse>(
-      'msdyn_CreateOperationSetV1',
-      { ProjectId: projectId, Description: description }
-    );
-
-    console.timeEnd('ScheduleApiClient.createOperationSet');
-    return result;
+  private async createOperationSet(projectId: string, description: string): Promise<string> {
+    const { data } = await this.client.request<{ OperationSetId: string }>('POST', 'msdyn_CreateOperationSetV1', {
+      ProjectId: projectId,
+      Description: description.slice(0, 200),
+    });
+    if (!data?.OperationSetId) throw new Error('msdyn_CreateOperationSetV1 did not return an OperationSetId');
+    return data.OperationSetId;
   }
 
-  /**
-   * Add a create operation to an OperationSet via msdyn_PssCreateV1
-   */
-  async pssCreate(entity: PssEntity, operationSetId: string): Promise<ServiceResult<void>> {
-    console.log(`ScheduleApiClient: pssCreate (${entity['@odata.type']}) in opSet ${operationSetId}`);
-
-    const result = await this.client.post<{ Entity: PssEntity; OperationSetId: string }, void>(
-      'msdyn_PssCreateV1',
-      { Entity: entity, OperationSetId: operationSetId }
-    );
-
-    return result;
+  private async abandon(operationSetId: string): Promise<void> {
+    try {
+      await this.client.request('POST', 'msdyn_AbandonOperationSetV1', { OperationSetId: operationSetId });
+    } catch {
+      // best effort: an abandoned/failed set frees the per-user limit of 10 open sets
+    }
   }
 
-  /**
-   * Execute an OperationSet — triggers all queued operations atomically
-   */
-  async executeOperationSet(operationSetId: string): Promise<ServiceResult<ExecuteOperationSetResponse>> {
-    console.log(`ScheduleApiClient: executeOperationSet ${operationSetId}`);
-    console.time(`ScheduleApiClient.executeOperationSet(${operationSetId})`);
-
-    const result = await this.client.post<{ OperationSetId: string }, ExecuteOperationSetResponse>(
-      'msdyn_ExecuteOperationSetV1',
-      { OperationSetId: operationSetId },
-      OPERATION_SET_TIMEOUT
-    );
-
-    console.timeEnd(`ScheduleApiClient.executeOperationSet(${operationSetId})`);
-    return result;
+  private async addOperations(operationSetId: string, operations: ScheduleOperation[]): Promise<void> {
+    const creates = operations.filter(o => o.kind === 'create') as Extract<ScheduleOperation, { kind: 'create' }>[];
+    if (creates.length) {
+      await this.client.request('POST', 'msdyn_PssCreateV2', { EntityCollection: creates.map(c => c.entity), OperationSetId: operationSetId }, OPERATION_SET_TIMEOUT);
+    }
+    for (const op of operations) {
+      if (op.kind === 'update') {
+        await this.client.request('POST', 'msdyn_PssUpdateV1', { Entity: op.entity, OperationSetId: operationSetId }, OPERATION_SET_TIMEOUT);
+      } else if (op.kind === 'contour') {
+        await this.client.request('POST', 'msdyn_PssUpdateResourceAssignmentContourV1', {
+          OperationSetId: operationSetId,
+          ResourceAssignmentId: op.assignmentId,
+          UpdatedContours: JSON.stringify(op.contour),
+        }, OPERATION_SET_TIMEOUT);
+      }
+    }
   }
 
-  /**
-   * Poll an OperationSet until it completes or fails
-   */
-  async pollOperationSet(operationSetId: string): Promise<ServiceResult<OperationSetDetail>> {
-    console.log(`ScheduleApiClient: pollOperationSet ${operationSetId}`);
+  private async readErrorLog(errorLogId?: string): Promise<string | undefined> {
+    if (!errorLogId) return undefined;
+    const log = await this.client.get<{ msdyn_log?: string; msdyn_errorcode?: string }>(`msdyn_psserrorlogs(${errorLogId})?$select=msdyn_log,msdyn_errorcode`);
+    if (!log.success || !log.data) return undefined;
+    const text = log.data.msdyn_log || '';
+    const firstLine = text.split(/\r?\n/).find(l => l.trim()) || text;
+    return [log.data.msdyn_errorcode, firstLine.slice(0, 600)].filter(Boolean).join(': ');
+  }
 
-    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-      const result = await this.client.getById<OperationSetDetail>(
-        'msdyn_operationsets',
-        operationSetId,
-        ['msdyn_operationsetid', 'msdyn_status', 'msdyn_statusreason', 'msdyn_completedon', 'msdyn_description']
+  private async waitForCompletion(operationSetId: string): Promise<OperationSetOutcome> {
+    const deadline = Date.now() + OPERATION_SET_MAX_WAIT;
+    while (Date.now() < deadline) {
+      const result = await this.client.get<{ msdyn_status: number; _msdyn_psserrorlog_value?: string }>(
+        `msdyn_operationsets(${operationSetId})?$select=msdyn_status,_msdyn_psserrorlog_value`
       );
-
-      if (!result.success || !result.data) {
-        return { success: false, error: result.error || 'Failed to poll OperationSet status' };
+      if (result.success && result.data) {
+        const status = result.data.msdyn_status;
+        if (status !== OPERATION_SET_STATUS.Open && status !== OPERATION_SET_STATUS.Pending) {
+          const outcome: OperationSetOutcome = { operationSetId, status, statusLabel: STATUS_LABEL[status] || String(status) };
+          if (status !== OPERATION_SET_STATUS.Completed) {
+            outcome.error = (await this.readErrorLog(result.data._msdyn_psserrorlog_value)) || `Operation set ${outcome.statusLabel.toLowerCase()}`;
+          }
+          return outcome;
+        }
       }
-
-      const status = OPERATION_SET_STATUS_MAP[result.data.msdyn_status];
-      console.log(`ScheduleApiClient: OperationSet ${operationSetId} status = ${status} (attempt ${attempt + 1})`);
-
-      if (status === 'Completed') {
-        return { success: true, data: result.data, isLiveData: true };
-      }
-
-      if (status === 'Failed') {
-        return {
-          success: false,
-          data: result.data,
-          error: result.data.msdyn_statusreason || 'OperationSet failed',
-        };
-      }
-
-      // Still processing — wait and retry
-      await new Promise(resolve => setTimeout(resolve, POLL_INTERVAL));
+      await sleep(POLL_INTERVAL);
     }
-
-    return {
-      success: false,
-      error: `OperationSet ${operationSetId} did not complete within ${MAX_POLL_ATTEMPTS * POLL_INTERVAL}ms`,
-    };
+    return { operationSetId, status: -1, statusLabel: 'Timed out', error: `Operation set did not finish within ${Math.round(OPERATION_SET_MAX_WAIT / 60000)} minutes. It may still complete; re-run to pick up anything missing.` };
   }
 
   /**
-   * Full OperationSet workflow: create → add operations → execute → poll
+   * Run operations for one project: create an operation set, queue the operations, execute and wait.
+   * Throws with a readable message when the set fails.
    */
-  async executeOperationBatch(
-    projectId: string,
-    description: string,
-    entities: PssEntity[],
-    onProgress?: (completed: number, total: number) => void
-  ): Promise<ServiceResult<OperationSetDetail>> {
-    const method = `ScheduleApiClient.executeOperationBatch(${description})`;
-    console.log(`${method}: Starting with ${entities.length} entities`);
-    console.time(method);
+  async run(projectId: string, description: string, operations: ScheduleOperation[]): Promise<OperationSetOutcome> {
+    if (!operations.length) return { operationSetId: '', status: OPERATION_SET_STATUS.Completed, statusLabel: 'Completed' };
+    if (operations.length > MAX_OPERATIONS_PER_SET) throw new Error(`Too many operations in one set (${operations.length} > ${MAX_OPERATIONS_PER_SET})`);
 
-    // 1. Create OperationSet
-    const createResult = await this.createOperationSet(projectId, description);
-    if (!createResult.success || !createResult.data) {
-      console.timeEnd(method);
-      return { success: false, error: createResult.error || 'Failed to create OperationSet' };
+    const operationSetId = await this.createOperationSet(projectId, description);
+    try {
+      await this.addOperations(operationSetId, operations);
+      await this.client.request('POST', 'msdyn_ExecuteOperationSetV1', { OperationSetId: operationSetId }, OPERATION_SET_TIMEOUT);
+    } catch (error) {
+      await this.abandon(operationSetId);
+      const raw = error instanceof DataverseHttpError ? error.message : (error as Error)?.message;
+      throw new Error(`${description}: ${extractDataverseErrorMessage(raw)}`);
     }
 
-    const operationSetId = createResult.data.OperationSetId;
-    console.log(`${method}: OperationSet created: ${operationSetId}`);
-
-    // 2. Add all entities via PssCreate
-    for (let i = 0; i < entities.length; i++) {
-      const pssResult = await this.pssCreate(entities[i], operationSetId);
-      if (!pssResult.success) {
-        console.error(`${method}: PssCreate failed at index ${i}`, pssResult.error);
-        console.timeEnd(method);
-        return { success: false, error: `PssCreate failed: ${pssResult.error}` };
-      }
-      onProgress?.(i + 1, entities.length);
+    const outcome = await this.waitForCompletion(operationSetId);
+    if (outcome.status !== OPERATION_SET_STATUS.Completed) {
+      throw new Error(`${description}: ${outcome.error}`);
     }
-
-    console.log(`${method}: All ${entities.length} entities added, executing...`);
-
-    // 3. Execute
-    const execResult = await this.executeOperationSet(operationSetId);
-    if (!execResult.success) {
-      console.timeEnd(method);
-      return { success: false, error: execResult.error || 'Failed to execute OperationSet' };
-    }
-
-    // 4. Poll for completion
-    const pollResult = await this.pollOperationSet(operationSetId);
-    console.timeEnd(method);
-    return pollResult;
+    return outcome;
   }
 }

@@ -15,7 +15,7 @@ msalInstance.initialize().then(() => {
     createRoot(document.getElementById('root')!).render(
       <StrictMode>
         <MsalProvider instance={msalInstance}>
-          <FluentProvider theme={webLightTheme}>
+          <FluentProvider theme={webLightTheme} style={{ backgroundColor: 'transparent', minHeight: '100vh' }}>
             <App />
           </FluentProvider>
         </MsalProvider>

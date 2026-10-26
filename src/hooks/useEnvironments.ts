@@ -1,135 +1,113 @@
 /**
- * Hook for managing environment connectivity status
- * Validates connection to both source and destination environments via WhoAmI
+ * Connects to both environments, identifies them (friendly name, version, user) and creates the services
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { DataverseClient } from '../clients/DataverseClient';
-import { ScheduleApiClient } from '../clients/ScheduleApiClient';
-import { SourceService } from '../services/SourceService';
-import { TargetService } from '../services/TargetService';
+import { MigrationPlanner } from '../services/MigrationPlanner';
+import { MigrationEngine } from '../services/MigrationEngine';
+import { EnvironmentService } from '../services/EnvironmentService';
 import { TargetCalendarService } from '../services/TargetCalendarService';
 import { SOURCE_ENV, TARGET_ENV, EnvironmentConfig } from '../config/environments';
-import { EnvironmentStatus, ConnectionStatus } from '../types/ui';
+import type { OrganizationInfo } from '../types/migration';
+import type { EnvironmentStatus } from '../types/ui';
 import { useAuth } from '../auth/useAuth';
+import { extractDataverseErrorMessage } from '../utils/dataverseErrors';
 
 export interface UseEnvironmentsReturn {
-  sourceStatus: EnvironmentStatus;
-  targetStatus: EnvironmentStatus;
+  source: EnvironmentStatus;
+  target: EnvironmentStatus;
+  sourceInfo?: OrganizationInfo;
+  targetInfo?: OrganizationInfo;
   sourceClient: DataverseClient | null;
   targetClient: DataverseClient | null;
-  sourceService: SourceService | null;
-  targetService: TargetService | null;
-  targetCalendarService: TargetCalendarService | null;
-  scheduleApiClient: ScheduleApiClient | null;
+  planner: MigrationPlanner | null;
+  engine: MigrationEngine | null;
+  calendars: TargetCalendarService | null;
   checkConnections: () => Promise<void>;
   isReady: boolean;
+  isChecking: boolean;
 }
+
+/** Turn the most common connection failures into plain guidance */
+export function explainConnectionError(raw: string, envName: string): string {
+  const message = extractDataverseErrorMessage(raw);
+  if (/0x80072560|not a member of the organization|notMemberOfOrg/i.test(raw)) {
+    return `${message} — the signed-in account isn't a user of ${envName}. Add it to the environment's security group (an Entra group), or add the user in Power Platform admin center > Environments > ${envName} > Settings > Users.`;
+  }
+  if (/AADSTS9002326/i.test(raw)) {
+    return `${message} — the app registration needs a "Single-page application" platform with redirect URI ${window.location.origin}.`;
+  }
+  if (/AADSTS65001|consent/i.test(raw)) {
+    return `${message} — an admin must grant consent for the Dynamics CRM (user_impersonation) permission on the app registration.`;
+  }
+  if (/HTTP 401/i.test(raw)) return `${message} — the token was rejected. Sign out and back in.`;
+  if (/HTTP 403/i.test(raw)) return `${message} — the account can sign in but lacks a security role in ${envName}.`;
+  if (/Failed to fetch|NetworkError/i.test(raw)) return `${message} — check the environment URL (${envName}) and your network.`;
+  return message;
+}
+
+const initial = (role: 'source' | 'target', env: EnvironmentConfig): EnvironmentStatus => ({ role, url: env.url, status: 'disconnected' });
 
 export function useEnvironments(): UseEnvironmentsReturn {
   const { getToken, isAuthenticated } = useAuth();
+  const [source, setSource] = useState<EnvironmentStatus>(initial('source', SOURCE_ENV));
+  const [target, setTarget] = useState<EnvironmentStatus>(initial('target', TARGET_ENV));
+  const [sourceInfo, setSourceInfo] = useState<OrganizationInfo>();
+  const [targetInfo, setTargetInfo] = useState<OrganizationInfo>();
+  const [isChecking, setIsChecking] = useState(false);
 
-  const [sourceStatus, setSourceStatus] = useState<EnvironmentStatus>({
-    name: SOURCE_ENV.name,
-    url: SOURCE_ENV.url,
-    status: 'disconnected',
-  });
+  const sourceClient = useMemo(() => (SOURCE_ENV.url ? new DataverseClient(SOURCE_ENV, getToken) : null), [getToken]);
+  const targetClient = useMemo(() => (TARGET_ENV.url ? new DataverseClient(TARGET_ENV, getToken) : null), [getToken]);
 
-  const [targetStatus, setTargetStatus] = useState<EnvironmentStatus>({
-    name: TARGET_ENV.name,
-    url: TARGET_ENV.url,
-    status: 'disconnected',
-  });
-
-  const [sourceClient, setSourceClient] = useState<DataverseClient | null>(null);
-  const [targetClient, setTargetClient] = useState<DataverseClient | null>(null);
-  const [sourceService, setSourceService] = useState<SourceService | null>(null);
-  const [targetService, setTargetService] = useState<TargetService | null>(null);
-  const [targetCalendarService, setTargetCalendarService] = useState<TargetCalendarService | null>(null);
-  const [scheduleApiClient, setScheduleApiClient] = useState<ScheduleApiClient | null>(null);
-
-  const checkConnection = useCallback(
-    async (
-      env: EnvironmentConfig,
-      setStatus: (s: EnvironmentStatus) => void
-    ): Promise<DataverseClient | null> => {
-      setStatus({ name: env.name, url: env.url, status: 'connecting' });
-
-      try {
-        const client = new DataverseClient(env, getToken);
-        const result = await client.whoAmI();
-
-        if (result.success && result.data) {
-          setStatus({
-            name: env.name,
-            url: env.url,
-            status: 'connected',
-            userId: result.data.UserId,
-          });
-          return client;
-        } else {
-          setStatus({
-            name: env.name,
-            url: env.url,
-            status: 'error',
-            error: result.error || 'WhoAmI failed',
-          });
-          return null;
-        }
-      } catch (error) {
-        setStatus({
-          name: env.name,
-          url: env.url,
-          status: 'error',
-          error: error instanceof Error ? error.message : 'Connection failed',
-        });
-        return null;
-      }
-    },
-    [getToken]
-  );
+  const connect = useCallback(async (
+    role: 'source' | 'target',
+    env: EnvironmentConfig,
+    client: DataverseClient | null,
+    setStatus: (s: EnvironmentStatus) => void,
+    setInfo: (i: OrganizationInfo | undefined) => void
+  ) => {
+    if (!client) {
+      setStatus({ role, url: '', status: 'error', error: `VITE_${role.toUpperCase()}_URL is not set in the .env file.` });
+      return;
+    }
+    setStatus({ role, url: env.url, status: 'connecting' });
+    const info = await new EnvironmentService(client).getOrganizationInfo();
+    if (info.success && info.data) {
+      setInfo(info.data);
+      setStatus({
+        role,
+        url: env.url,
+        status: 'connected',
+        friendlyName: info.data.friendlyName,
+        userId: info.data.userId,
+        userName: info.data.userName,
+        projectOperationsVersion: info.data.projectOperationsVersion,
+        environmentId: info.data.environmentId,
+      });
+    } else {
+      setInfo(undefined);
+      setStatus({ role, url: env.url, status: 'error', error: explainConnectionError(info.error || 'Connection failed', env.url) });
+    }
+  }, []);
 
   const checkConnections = useCallback(async () => {
-    console.log('useEnvironments: Checking connections to both environments');
-
-    const [src, tgt] = await Promise.all([
-      checkConnection(SOURCE_ENV, setSourceStatus),
-      checkConnection(TARGET_ENV, setTargetStatus),
+    setIsChecking(true);
+    await Promise.all([
+      connect('source', SOURCE_ENV, sourceClient, setSource, setSourceInfo),
+      connect('target', TARGET_ENV, targetClient, setTarget, setTargetInfo),
     ]);
+    setIsChecking(false);
+  }, [connect, sourceClient, targetClient]);
 
-    setSourceClient(src);
-    setTargetClient(tgt);
-
-    if (src) {
-      setSourceService(new SourceService(src));
-    }
-    if (tgt) {
-      const schedApi = new ScheduleApiClient(tgt);
-      setScheduleApiClient(schedApi);
-      setTargetService(new TargetService(schedApi));
-      setTargetCalendarService(new TargetCalendarService(tgt));
-    }
-  }, [checkConnection]);
-
-  // Auto-check connections when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      checkConnections();
-    }
+    if (isAuthenticated) checkConnections();
   }, [isAuthenticated, checkConnections]);
 
-  const isReady = sourceStatus.status === 'connected' && targetStatus.status === 'connected';
+  const isReady = source.status === 'connected' && target.status === 'connected';
+  const planner = useMemo(() => (isReady && sourceClient && targetClient ? new MigrationPlanner(sourceClient, targetClient) : null), [isReady, sourceClient, targetClient]);
+  const engine = useMemo(() => (isReady && sourceClient && targetClient ? new MigrationEngine(sourceClient, targetClient) : null), [isReady, sourceClient, targetClient]);
+  const calendars = useMemo(() => (targetClient ? new TargetCalendarService(targetClient) : null), [targetClient]);
 
-  return {
-    sourceStatus,
-    targetStatus,
-    sourceClient,
-    targetClient,
-    sourceService,
-    targetService,
-    targetCalendarService,
-    scheduleApiClient,
-    checkConnections,
-    isReady,
-  };
+  return { source, target, sourceInfo, targetInfo, sourceClient, targetClient, planner, engine, calendars, checkConnections, isReady, isChecking };
 }
