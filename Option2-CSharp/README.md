@@ -663,7 +663,7 @@ For issues:
 
 ## License
 
-Copyright BDO. All rights reserved.
+See the repository license.
 
 ## Version
 

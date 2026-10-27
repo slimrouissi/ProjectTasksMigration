@@ -10,7 +10,7 @@
     <RootNamespace>ProjectMigration</RootNamespace>
     <Version>1.0.0</Version>
     <Description>Dynamics 365 Project Operations Migration Tool using Schedule API</Description>
-    <Authors>BDO</Authors>
+    <Authors>ProjectTasksMigration contributors</Authors>
   </PropertyGroup>
 
   <ItemGroup>

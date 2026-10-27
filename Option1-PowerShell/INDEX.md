@@ -425,7 +425,7 @@ OperationSets batch operations (max 200) for efficiency:
 
 ### Test with Specific Projects
 ```powershell
-./Migrate-AllProjects.ps1 -ConfigPath "./config.json" -ProjectFilter "BDO"
+./Migrate-AllProjects.ps1 -ConfigPath "./config.json" -ProjectFilter "Contoso"
 ```
 
 ### Reimport from Previous Export
@@ -515,4 +515,4 @@ $VerbosePreference = "Continue"
 **Version**: 1.0
 **Last Updated**: 2024-01-15
 **Tested With**: Project Operations 4.0+, PowerShell 7.0+, 190 projects with 1000+ tasks
-**Author**: BDO Dynamics 365 Migration Team
+**Author**: Dynamics 365 Project Operations migration contributors

@@ -9,7 +9,7 @@
  */
 
 import { DataverseClient, DataverseHttpError } from './DataverseClient';
-import { OPERATION_SET_TIMEOUT, POLL_INTERVAL, OPERATION_SET_MAX_WAIT, MAX_OPERATIONS_PER_SET } from '../config/appConfig';
+import { OPERATION_SET_TIMEOUT, POLL_INTERVAL, OPERATION_SET_MAX_WAIT, MAX_OPERATIONS_PER_SET, WAIT_NOTICE_INTERVAL } from '../config/appConfig';
 import type { ServiceResult } from '../types/migration';
 import type { ContourSlice } from '../utils/plannedWork';
 import { extractDataverseErrorMessage } from '../utils/dataverseErrors';
@@ -121,9 +121,15 @@ export class ScheduleApiClient {
     return [log.data.msdyn_errorcode, firstLine.slice(0, 600)].filter(Boolean).join(': ');
   }
 
-  private async waitForCompletion(operationSetId: string): Promise<OperationSetOutcome> {
-    const deadline = Date.now() + OPERATION_SET_MAX_WAIT;
+  private async waitForCompletion(operationSetId: string, onWaiting?: (elapsedMs: number) => void): Promise<OperationSetOutcome> {
+    const started = Date.now();
+    const deadline = started + OPERATION_SET_MAX_WAIT;
+    let nextNotice = started + WAIT_NOTICE_INTERVAL;
     while (Date.now() < deadline) {
+      if (onWaiting && Date.now() >= nextNotice) {
+        onWaiting(Date.now() - started);
+        nextNotice += WAIT_NOTICE_INTERVAL;
+      }
       const result = await this.client.get<{ msdyn_status: number; _msdyn_psserrorlog_value?: string }>(
         `msdyn_operationsets(${operationSetId})?$select=msdyn_status,_msdyn_psserrorlog_value`
       );
@@ -146,7 +152,12 @@ export class ScheduleApiClient {
    * Run operations for one project: create an operation set, queue the operations, execute and wait.
    * Throws with a readable message when the set fails.
    */
-  async run(projectId: string, description: string, operations: ScheduleOperation[]): Promise<OperationSetOutcome> {
+  async run(
+    projectId: string,
+    description: string,
+    operations: ScheduleOperation[],
+    onWaiting?: (elapsedMs: number) => void
+  ): Promise<OperationSetOutcome> {
     if (!operations.length) return { operationSetId: '', status: OPERATION_SET_STATUS.Completed, statusLabel: 'Completed' };
     if (operations.length > MAX_OPERATIONS_PER_SET) throw new Error(`Too many operations in one set (${operations.length} > ${MAX_OPERATIONS_PER_SET})`);
 
@@ -160,7 +171,7 @@ export class ScheduleApiClient {
       throw new Error(`${description}: ${extractDataverseErrorMessage(raw)}`);
     }
 
-    const outcome = await this.waitForCompletion(operationSetId);
+    const outcome = await this.waitForCompletion(operationSetId, onWaiting);
     if (outcome.status !== OPERATION_SET_STATUS.Completed) {
       throw new Error(`${description}: ${outcome.error}`);
     }

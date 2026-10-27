@@ -4,7 +4,7 @@ A UAT-grade PowerShell-based migration tool for migrating Dynamics 365 Project O
 
 ## Overview
 
-This tool is designed specifically for large-scale migrations (BDO's ~190 projects scenario) with:
+This tool is designed specifically for large-scale migrations (e.g. ~190 projects) with:
 
 - **Schedule API Integration**: Uses the official Schedule API (OperationSet) for all scheduling entities
 - **Comprehensive Entity Support**: Projects, tasks, dependencies, team members, resource assignments, buckets
@@ -153,7 +153,7 @@ Repeat the same steps with the target App Registration's Application ID
 3. **Key Configuration Explanations**:
    - `operationSetMaxSize`: Maximum operations per OperationSet (max 200)
    - `pageSize`: Records per query page (max 5000)
-   - `projectFilter`: Filter projects by name substring (e.g., "BDO" to only migrate projects with "BDO" in name)
+   - `projectFilter`: Filter projects by name substring (e.g., "Contoso" to only migrate projects with "Contoso" in name)
    - `skipProjects`: Array of project names to skip
    - `maxPollingWaitMinutes`: Timeout for waiting on OperationSet completion
    - `customFieldMappings`: Maps custom fields between environments
@@ -484,7 +484,7 @@ For issues, questions, or enhancements:
 
 ## License
 
-Internal use only. Part of BDO Dynamics 365 Project Operations migration initiative.
+See the repository license.
 
 ## Version History
 

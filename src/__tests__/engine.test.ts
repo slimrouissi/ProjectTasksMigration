@@ -116,22 +116,22 @@ describe('OData helpers', () => {
 
 describe('project matching', () => {
   const sources = [
-    { msdyn_projectid: 's1', msdyn_subject: 'DXC_Ivari Phase 2', cr_oracleprojectnumber: '640550' },
-    { msdyn_projectid: 's2', msdyn_subject: 'No Key Project', cr_oracleprojectnumber: null },
-    { msdyn_projectid: 's3', msdyn_subject: 'Missing', cr_oracleprojectnumber: '999' },
-    { msdyn_projectid: 's4', msdyn_subject: 'Dup', cr_oracleprojectnumber: '111' },
+    { msdyn_projectid: 's1', msdyn_subject: 'Contoso ERP Rollout', cr_erpprojectnumber: 'CON-2041' },
+    { msdyn_projectid: 's2', msdyn_subject: 'No Key Project', cr_erpprojectnumber: null },
+    { msdyn_projectid: 's3', msdyn_subject: 'Missing', cr_erpprojectnumber: '999' },
+    { msdyn_projectid: 's4', msdyn_subject: 'Dup', cr_erpprojectnumber: '111' },
   ] as unknown as SourceProject[];
   const targets = [
-    { id: 't1', name: 'DXC_Ivari Phase 2 (shell)', key: '640550' },
+    { id: 't1', name: 'Contoso ERP Rollout (shell)', key: 'CON-2041' },
     { id: 't2', name: 'no key project', key: undefined },
     { id: 't3', name: 'A', key: '111' },
     { id: 't4', name: 'B', key: '111 ' },
   ];
-  const rule = { sourceField: 'cr_oracleprojectnumber', targetField: 'msdyn_projectnumber', fallbackToName: true };
+  const rule = { sourceField: 'cr_erpprojectnumber', targetField: 'msdyn_projectnumber', fallbackToName: true };
 
   it('matches by key, falls back to name, flags missing and ambiguous', () => {
     const m = ProjectMatchService.matchProjects(sources, targets, rule);
-    expect(m[0]).toMatchObject({ status: 'matched', target: { id: 't1' }, sourceKey: '640550' });
+    expect(m[0]).toMatchObject({ status: 'matched', target: { id: 't1' }, sourceKey: 'CON-2041' });
     expect(m[1]).toMatchObject({ status: 'matched-by-name', target: { id: 't2' } });
     expect(m[2]).toMatchObject({ status: 'not-found' });
     expect(m[3]).toMatchObject({ status: 'ambiguous' });
@@ -152,7 +152,7 @@ describe('project matching', () => {
 describe('team planning', () => {
   const resolution: ResourceResolution = {
     matches: new Map([
-      ['r-vince', { source: { id: 'r-vince', name: 'Vince Scali', resourceType: 3, active: true }, target: { id: 't-vince', name: 'Vince Scali', resourceType: 3, active: true, calendarId: 'c1' }, method: 'entra-user', issues: [] }],
+      ['r-jordan', { source: { id: 'r-jordan', name: 'Jordan Lee', resourceType: 3, active: true }, target: { id: 't-jordan', name: 'Jordan Lee', resourceType: 3, active: true, calendarId: 'c1' }, method: 'entra-user', issues: [] }],
       ['r-gone', { source: { id: 'r-gone', name: 'Former Employee', resourceType: 3, active: true }, method: 'none', issues: [{ code: 'not-found', severity: 'error', message: 'not found' }] }],
       ['r-gen', { source: { id: 'r-gen', name: 'Generic Resource', resourceType: 1, active: true }, target: { id: 't-gen', name: 'Generic Resource', resourceType: 1, active: true, calendarId: 'c2' }, method: 'generic', issues: [] }],
     ]),
@@ -161,7 +161,7 @@ describe('team planning', () => {
     targetRoles: [{ id: 'trole-dev', name: 'developer' }, { id: 'trole-tm', name: 'Team Member' }],
   };
   const team: SourceTeamMember[] = [
-    { msdyn_projectteamid: 'tm1', msdyn_name: 'Vince Scali', _msdyn_project_value: 'p', _msdyn_bookableresourceid_value: 'r-vince', _msdyn_resourcecategory_value: 'role-dev', resourceName: 'Vince Scali' },
+    { msdyn_projectteamid: 'tm1', msdyn_name: 'Jordan Lee', _msdyn_project_value: 'p', _msdyn_bookableresourceid_value: 'r-jordan', _msdyn_resourcecategory_value: 'role-dev', resourceName: 'Jordan Lee' },
     { msdyn_projectteamid: 'tm2', msdyn_name: 'Former Employee', _msdyn_project_value: 'p', _msdyn_bookableresourceid_value: 'r-gone', _msdyn_resourcecategory_value: 'role-dev', resourceName: 'Former Employee' },
     { msdyn_projectteamid: 'tm3', msdyn_name: 'Analyst', _msdyn_project_value: 'p', _msdyn_bookableresourceid_value: 'r-gen', _msdyn_resourcecategory_value: 'role-an', resourceName: 'Generic Resource' },
   ];
@@ -171,7 +171,7 @@ describe('team planning', () => {
 
   it('maps resources and roles, and falls back to generic team members', () => {
     const plan = ResourceService.planTeam(team, assignments, resolution, undefined, { unresolved: 'generic' });
-    expect(plan[0]).toMatchObject({ action: 'create', target: { id: 't-vince' }, targetRole: { id: 'trole-dev' }, plannedHours: 16, assignmentCount: 1 });
+    expect(plan[0]).toMatchObject({ action: 'create', target: { id: 't-jordan' }, targetRole: { id: 'trole-dev' }, plannedHours: 16, assignmentCount: 1 });
     expect(plan[1]).toMatchObject({ action: 'generic', targetRole: { id: 'trole-dev' } });
     expect(plan[2].action).toBe('skip'); // generic with a role that doesn't exist and no fallback
     expect(plan[2].issues.some(i => i.code === 'role-missing' && i.severity === 'error')).toBe(true);
@@ -184,7 +184,7 @@ describe('team planning', () => {
   });
 
   it('reuses a team member already on the target project', () => {
-    const state = { projectId: 'tp', tasks: [], buckets: [], assignments: [], dependencies: [], teamMembers: [{ id: 'existing-tm', name: 'Vince Scali', resourceId: 't-vince', roleId: 'trole-dev' }] };
+    const state = { projectId: 'tp', tasks: [], buckets: [], assignments: [], dependencies: [], teamMembers: [{ id: 'existing-tm', name: 'Jordan Lee', resourceId: 't-jordan', roleId: 'trole-dev' }] };
     const plan = ResourceService.planTeam(team, assignments, resolution, state, { unresolved: 'generic' });
     expect(plan[0]).toMatchObject({ action: 'reuse', existingTargetTeamMemberId: 'existing-tm' });
   });
@@ -222,7 +222,7 @@ describe('reconciliation and validation', () => {
       ],
       targetAssignments: [{ msdyn_resourceassignmentid: 'ta', _msdyn_taskid_value: 'x2', _msdyn_projectteamid_value: 'ttm', msdyn_plannedwork: JSON.stringify([slice('2026-01-05', 8), slice('2026-01-06', 7)]) }],
       teamMap: new Map([['tm1', 'ttm']]),
-      teamNames: new Map([['tm1', 'Vince']]),
+      teamNames: new Map([['tm1', 'Jordan']]),
     });
     expect(rec.summary).toMatchObject({ tasksMatched: 2, tasksMissing: 1, assignmentsDiffer: 1, sourceHours: 16, targetHours: 15 });
     expect(rec.assignments).toHaveLength(1);

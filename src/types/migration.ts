@@ -170,7 +170,7 @@ export interface WorkHourTemplateCheck {
 // =====================================================
 
 export interface ProjectKeyRule {
-  /** Logical name of the source msdyn_project field holding the key (e.g. an "Oracle Project Number" column) */
+  /** Logical name of the source msdyn_project field holding the key (e.g. an "ERP Project Number" column) */
   sourceField: string;
   /** Logical name of the target msdyn_project field holding the same value (e.g. msdyn_projectnumber = "Project ID") */
   targetField: string;

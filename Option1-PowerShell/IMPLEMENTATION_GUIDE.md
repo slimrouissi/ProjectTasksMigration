@@ -1,6 +1,6 @@
 # Dynamics 365 Project Operations Migration - Implementation Guide
 
-Quick reference guide for executing the migration tool for BDO's ~190 projects scenario.
+Quick reference guide for executing the migration tool for a ~190-project migration.
 
 ## Quick Start (5 Steps)
 

@@ -112,10 +112,12 @@ export class MigrationEngine {
     const errors: string[] = [];
     const failedOps: ScheduleOperation[] = [];
     const batches = chunk(ops, MAX_OPERATIONS_PER_SET);
+    const waiting = (elapsedMs: number) =>
+      log(stage, `Still waiting for Project Operations to process the ${label} (${Math.round(elapsedMs / 1000)}s). Large or busy environments can take several minutes; don't close this tab.`);
     for (let b = 0; b < batches.length; b++) {
       const description = `Migration ${label}${batches.length > 1 ? ` ${b + 1}/${batches.length}` : ''}`;
       try {
-        await this.schedule.run(projectId, description, batches[b]);
+        await this.schedule.run(projectId, description, batches[b], waiting);
         done += batches[b].length;
       } catch (error) {
         if (isolateFailures && batches[b].length > 1) {
@@ -123,7 +125,7 @@ export class MigrationEngine {
           log(stage, `A batch failed; retrying the ${batches[b].length} items one at a time to isolate the problem…`, 'warn');
           for (const op of batches[b]) {
             try {
-              await this.schedule.run(projectId, `${description} – ${op.label || 'item'}`, [op]);
+              await this.schedule.run(projectId, `${description} – ${op.label || 'item'}`, [op], waiting);
               done++;
             } catch (singleError) {
               failed++;

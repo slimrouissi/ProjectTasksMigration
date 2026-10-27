@@ -1,6 +1,6 @@
 /**
  * Project Match Service — pairs each source project with an existing target project (the "shell")
- * using a configurable key field on both sides, e.g. source "Oracle Project Number" → target "Project ID".
+ * using a configurable key field on both sides, e.g. source "ERP Project Number" → target "Project ID".
  */
 
 import { DataverseClient } from '../clients/DataverseClient';

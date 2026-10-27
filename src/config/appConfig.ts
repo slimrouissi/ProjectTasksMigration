@@ -26,5 +26,8 @@ export const POLL_INTERVAL = 2000;
 /** How long to wait for an OperationSet to finish before giving up (ms) */
 export const OPERATION_SET_MAX_WAIT = 10 * 60 * 1000;
 
+/** How often to log a "still waiting" line while Project Operations processes an OperationSet (ms) */
+export const WAIT_NOTICE_INTERVAL = 30000;
+
 /** Parallel requests when reading per-project data */
 export const READ_CONCURRENCY = 4;

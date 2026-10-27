@@ -1,6 +1,6 @@
 /**
  * Metadata Service — reads table/column metadata so the tool can:
- * - offer the project key fields (e.g. "Oracle Project Number" → "Project ID") in dropdowns
+ * - offer the project key fields (e.g. "ERP Project Number" → "Project ID") in dropdowns
  * - discover tables that hang off a project (risks, issues, changes, status reports, custom RAID tables)
  * - copy related records generically, including only columns that exist in the target
  */

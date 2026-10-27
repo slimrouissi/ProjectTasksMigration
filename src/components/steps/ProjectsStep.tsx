@@ -94,7 +94,7 @@ export function ProjectsStep({ app, env }: { app: MigrationApp; env: UseEnvironm
       </Section>
 
       {config.mode === 'existing' && (
-        <Section title="How to find each project in the target" icon={<Link20Regular />} subtitle="Pick the field that holds the same value on both sides, for example the source's Oracle project number and the target's Project ID.">
+        <Section title="How to find each project in the target" icon={<Link20Regular />} subtitle="Pick the field that holds the same value on both sides, for example an ERP project number in the source and the Project ID in the target.">
           <div className={s.keyRow}>
             <KeyFieldDropdown
               label={`Source field (${env.source.friendlyName || 'source'})`}

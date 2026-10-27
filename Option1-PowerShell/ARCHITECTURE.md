@@ -547,4 +547,4 @@ $VerbosePreference = "Continue"
 
 **Last Updated**: 2024-01-15
 **Version**: 1.0
-**Authors**: BDO Dynamics 365 Team
+**Authors**: Dynamics 365 Project Operations migration contributors

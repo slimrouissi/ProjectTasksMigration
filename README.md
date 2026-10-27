@@ -17,12 +17,44 @@ It's built with React, TypeScript and Fluent UI. It signs in with Microsoft Entr
 
 | Step | What happens |
 |---|---|
-| **1. Projects** | Choose **Add to existing projects** (project shells already in the target, e.g. created by an ERP integration) or **Create new projects**. For existing projects, pick the key field on each side, e.g. source *Oracle Project Number* → target *Project ID*. Select source projects. |
+| **1. Projects** | Choose **Add to existing projects** (project shells already in the target, e.g. created by an ERP integration) or **Create new projects**. For existing projects, pick the key field on each side, e.g. source *ERP Project Number* → target *Project ID*. Select source projects. |
 | **2. Options** | How to handle team members whose resource can't be used (generic team member with the same role, or leave out), a fallback role, whether to copy planned hours, and which related tables to copy. |
 | **3. Readiness check** | Read-only. Checks the environments, the migration account, project matches, every bookable resource (exists, active, has work hours, role exists) and the source data. Each problem comes with the exact fix. You can pick a different target project, resource or role right in the tables. **Download the report** (Markdown or JSON) to share instead of screenshots. |
 | **4. Run & reconcile** | Migrates, then compares source and target task by task (dates, effort) and assignment by assignment (hours), plus related-record counts. |
 
 **Safe to run again.** Anything already in the target project (team members, tasks by their position in the hierarchy, dependencies, assignments, related records) is reused, not duplicated. If a run stops halfway, fix the cause and run again.
+
+## Walkthrough
+
+The screenshots below show a real run between two demo environments using fictional sample data: a source project *Contoso - ERP Rollout Wave 2* (Project ID `CON-2041`) is added to an empty project shell that an ERP integration had already created in the target with the same Project ID.
+
+**1. Choose where the data goes and how to find each project.** Pick *Add to projects that already exist in the target*, then the field that holds the same value on both sides (here *Project ID* → *Project ID*; it can be any column, such as a custom ERP project number). Select the projects to migrate.
+
+![Step 1: projects and matching key](docs/images/1-projects.png)
+
+**2. Options.** Decide what happens when a person's bookable resource can't be used in the target, whether to copy planned hours, and which related tables to bring across (risks, issues, changes, status reports and any custom table linked to the project).
+
+![Step 2: options](docs/images/2-options.png)
+
+**3. Readiness check (read-only).** Nothing is written yet. The tool checks both environments and the migration account, including that the account has a bookable resource with work hours in the target, and summarises what will be added. Use **Report** to download it and share it instead of screenshots.
+
+![Step 3: readiness summary](docs/images/3-readiness.png)
+
+Each project shows the target shell it matched (you can pick another one) and its checks.
+
+![Step 3: project match and checks](docs/images/4-project-match.png)
+
+Every team member is matched to a bookable resource in the target and checked. In this example *Jamie Reyes* doesn't exist in the target, so the row says exactly what to do: create the resource and re-check, pick another resource in the dropdown, or let the tool add a generic team member with the same role.
+
+![Step 3: bookable resource validation](docs/images/5-bookable-resources.png)
+
+**4. Run.** The log shows each stage: team members, tasks, dependencies, assignments, planned hours and related records. Project Operations processes schedule changes in the background, so a stage can take a few minutes on a busy environment; the log shows when the tool is still waiting.
+
+![Step 4: run log and summary](docs/images/6-run.png)
+
+**5. Reconcile.** After the run the tool compares source and target task by task and assignment by assignment. Here all 9 tasks match and all 7 assignments carry the same planned hours (384h → 384h). Download the report or the ID mappings for your records.
+
+![Step 4: reconciliation](docs/images/7-reconciliation.png)
 
 ### How resources are matched
 

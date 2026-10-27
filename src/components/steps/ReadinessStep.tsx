@@ -30,7 +30,7 @@ const useStyles = makeStyles({
   muted: { color: tokens.colorNeutralForeground3 },
   issue: { display: 'block', fontSize: '12px' },
   fix: { display: 'block', fontSize: '12px', color: tokens.colorNeutralForeground2, marginTop: '2px' },
-  sub: { display: 'block', fontSize: '11px', color: tokens.colorNeutralForeground3 },
+  sub: { display: 'block', fontSize: '11px', color: tokens.colorNeutralForeground3, overflowWrap: 'anywhere' },
   actions: { display: 'flex', columnGap: '8px' },
 });
 
